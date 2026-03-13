@@ -29,8 +29,7 @@ Host Machine (Mac/Linux)
 cd hadoop-hive-lab
 
 # 2. Build và start toàn bộ cluster (~10-15 phút lần đầu)
-docker compose up -d --build
-
+COMPOSE_PARALLEL_LIMIT=1 docker compose build && docker compose up -d
 # 3. Theo dõi quá trình khởi động master
 docker logs -f master
 # Chờ đến khi thấy: "HiveServer2 started"
