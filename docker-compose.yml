@@ -2,7 +2,6 @@ version: "3.8"
 
 # =============================================================================
 # Hadoop 3.3.6 + Hive 2.3.9 — Self-contained cluster
-# Build order: base → slave(x2) → master
 # Chạy: docker compose up -d --build
 # =============================================================================
 
@@ -21,24 +20,12 @@ volumes:
 
 services:
 
-  # ── bước 0: build base image trước ─────────────────────────────────────────
-  base-builder:
-    build:
-      context: .
-      dockerfile: Dockerfile.base
-    image: hadoop-base:3.3.6
-    command: echo "base image built"
-    networks:
-      - hadoop-net
-
   # ── MySQL 8.0 — Hive Metastore ─────────────────────────────────────────────
   mysql:
     image: mysql:8.0
     container_name: mysql
     hostname: mysql
     restart: unless-stopped
-    depends_on:
-      - base-builder
     networks:
       hadoop-net:
         ipv4_address: 172.20.0.10
@@ -71,8 +58,6 @@ services:
     container_name: slave1
     hostname: slave1
     restart: unless-stopped
-    depends_on:
-      - base-builder
     networks:
       hadoop-net:
         ipv4_address: 172.20.0.21
@@ -83,7 +68,7 @@ services:
     volumes:
       - datanode1-data:/hadoop/dfs/data
     ports:
-      - "9864:9864"   # DataNode Web UI
+      - "9864:9864"
 
   # ── Slave 2 — DataNode + NodeManager ───────────────────────────────────────
   slave2:
@@ -94,8 +79,6 @@ services:
     container_name: slave2
     hostname: slave2
     restart: unless-stopped
-    depends_on:
-      - base-builder
     networks:
       hadoop-net:
         ipv4_address: 172.20.0.22
@@ -106,7 +89,7 @@ services:
     volumes:
       - datanode2-data:/hadoop/dfs/data
     ports:
-      - "9865:9864"   # DataNode Web UI (host port khác tránh conflict)
+      - "9865:9864"
 
   # ── Master — NameNode + ResourceManager + HiveServer2 ──────────────────────
   master:
@@ -134,8 +117,8 @@ services:
     volumes:
       - namenode-data:/hadoop/dfs/name
     ports:
-      - "9870:9870"    # HDFS NameNode Web UI
-      - "8088:8088"    # YARN ResourceManager Web UI
-      - "10000:10000"  # HiveServer2 Thrift
-      - "10002:10002"  # HiveServer2 Web UI
-      - "19888:19888"  # MapReduce Job History
+      - "9870:9870"
+      - "8088:8088"
+      - "10000:10000"
+      - "10002:10002"
+      - "19888:19888"

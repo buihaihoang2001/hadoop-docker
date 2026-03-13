@@ -1,14 +1,43 @@
 # ============================================================
-# Master node: Base + Hive 2.3.9 + MySQL Connector
-# NameNode + ResourceManager + HiveServer2
+# Master node — Ubuntu 20.04 + Java 8 + Hadoop 3.3.6 + Hive 2.3.9
+# NameNode + ResourceManager + HiveServer2 — self-contained
 # ============================================================
-FROM hadoop-base:3.3.6
-
+FROM ubuntu:20.04
+ENV DEBIAN_FRONTEND=noninteractive
+ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+ENV HADOOP_VERSION=3.3.6
+ENV HADOOP_HOME=/usr/local/hadoop
 ENV HIVE_VERSION=2.3.9
 ENV HIVE_HOME=/usr/local/hive
-ENV PATH=$PATH:$HIVE_HOME/bin
+ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$HIVE_HOME/bin
 
-# 1. Hive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openjdk-8-jdk openssh-server openssh-client \
+        wget curl netcat sudo vim \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd hadoop \
+ && useradd -m -s /bin/bash -G hadoop,sudo hduser \
+ && echo "hduser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+RUN mkdir -p /home/hduser/.ssh \
+ && ssh-keygen -t rsa -P "" -f /home/hduser/.ssh/id_rsa \
+ && cat /home/hduser/.ssh/id_rsa.pub >> /home/hduser/.ssh/authorized_keys \
+ && chmod 700 /home/hduser/.ssh && chmod 600 /home/hduser/.ssh/authorized_keys \
+ && chown -R hduser:hduser /home/hduser/.ssh
+
+RUN mkdir -p /run/sshd \
+ && sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
+ && echo "StrictHostKeyChecking no"     >> /etc/ssh/ssh_config \
+ && echo "UserKnownHostsFile /dev/null" >> /etc/ssh/ssh_config
+
+RUN wget -q https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz \
+        -O /tmp/hadoop.tar.gz \
+ && tar -xzf /tmp/hadoop.tar.gz -C /usr/local/ \
+ && mv /usr/local/hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
+ && rm /tmp/hadoop.tar.gz \
+ && chown -R hduser:hadoop ${HADOOP_HOME}
+
 RUN wget -q https://archive.apache.org/dist/hive/hive-${HIVE_VERSION}/apache-hive-${HIVE_VERSION}-bin.tar.gz \
         -O /tmp/hive.tar.gz \
  && tar -xzf /tmp/hive.tar.gz -C /usr/local/ \
@@ -16,34 +45,37 @@ RUN wget -q https://archive.apache.org/dist/hive/hive-${HIVE_VERSION}/apache-hiv
  && rm /tmp/hive.tar.gz \
  && chown -R hduser:hadoop ${HIVE_HOME}
 
-# 2. MySQL Connector/J
 RUN wget -q https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.30/mysql-connector-java-8.0.30.jar \
         -O ${HIVE_HOME}/lib/mysql-connector-java-8.0.30.jar \
  && chown hduser:hadoop ${HIVE_HOME}/lib/mysql-connector-java-8.0.30.jar
 
-# 3. Fix guava conflict (Hive dùng guava cũ, Hadoop dùng guava mới hơn)
 RUN OLD=$(ls ${HIVE_HOME}/lib/guava-*.jar 2>/dev/null | head -1) \
  && NEW=$(ls ${HADOOP_HOME}/share/hadoop/hdfs/lib/guava-*.jar 2>/dev/null | head -1) \
  && [ -n "$OLD" ] && rm -f "$OLD" || true \
  && [ -n "$NEW" ] && cp "$NEW" ${HIVE_HOME}/lib/ && chown hduser:hadoop ${HIVE_HOME}/lib/guava-*.jar || true
 
-# 4. Hadoop config
+RUN echo "export JAVA_HOME=${JAVA_HOME}"                         >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export HDFS_NAMENODE_USER=hduser"                      >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export HDFS_DATANODE_USER=hduser"                      >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export HDFS_SECONDARYNAMENODE_USER=hduser"             >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export YARN_RESOURCEMANAGER_USER=hduser"               >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export YARN_NODEMANAGER_USER=hduser"                   >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
+
+RUN echo "export JAVA_HOME=${JAVA_HOME}"       >> /home/hduser/.bashrc \
+ && echo "export HADOOP_HOME=${HADOOP_HOME}"   >> /home/hduser/.bashrc \
+ && echo "export HIVE_HOME=${HIVE_HOME}"       >> /home/hduser/.bashrc \
+ && echo "export PATH=\$PATH:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${HIVE_HOME}/bin" >> /home/hduser/.bashrc
+
 COPY conf/hadoop/core-site.xml   ${HADOOP_HOME}/etc/hadoop/core-site.xml
 COPY conf/hadoop/hdfs-site.xml   ${HADOOP_HOME}/etc/hadoop/hdfs-site.xml
 COPY conf/hadoop/yarn-site.xml   ${HADOOP_HOME}/etc/hadoop/yarn-site.xml
 COPY conf/hadoop/mapred-site.xml ${HADOOP_HOME}/etc/hadoop/mapred-site.xml
 COPY conf/hadoop/workers         ${HADOOP_HOME}/etc/hadoop/workers
 
-# 5. Hive config
 COPY conf/hive/hive-site.xml  ${HIVE_HOME}/conf/hive-site.xml
 COPY conf/hive/hive-env.sh    ${HIVE_HOME}/conf/hive-env.sh
 RUN chmod +x ${HIVE_HOME}/conf/hive-env.sh
 
-# 6. bashrc Hive
-RUN echo "export HIVE_HOME=${HIVE_HOME}"     >> /home/hduser/.bashrc \
- && echo "export PATH=\$PATH:${HIVE_HOME}/bin" >> /home/hduser/.bashrc
-
-# 7. HDFS dirs
 RUN mkdir -p /hadoop/dfs/name && chown -R hduser:hadoop /hadoop
 
 COPY entrypoint-master.sh /entrypoint.sh
