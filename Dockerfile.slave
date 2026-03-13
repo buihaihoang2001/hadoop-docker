@@ -1,0 +1,18 @@
+# ============================================================
+# Slave node: Base only
+# DataNode + NodeManager
+# ============================================================
+FROM hadoop-base:3.3.6
+
+COPY conf/hadoop/core-site.xml   ${HADOOP_HOME}/etc/hadoop/core-site.xml
+COPY conf/hadoop/hdfs-site.xml   ${HADOOP_HOME}/etc/hadoop/hdfs-site.xml
+COPY conf/hadoop/yarn-site.xml   ${HADOOP_HOME}/etc/hadoop/yarn-site.xml
+COPY conf/hadoop/mapred-site.xml ${HADOOP_HOME}/etc/hadoop/mapred-site.xml
+
+RUN mkdir -p /hadoop/dfs/data && chown -R hduser:hadoop /hadoop
+
+COPY entrypoint-slave.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 22 9864 8042
+ENTRYPOINT ["/entrypoint.sh"]

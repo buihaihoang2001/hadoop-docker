@@ -1,0 +1,57 @@
+# ============================================================
+# Base image: Ubuntu 20.04 + Java 8 + SSH + Hadoop 3.3.6
+# Dùng chung cho master và slave
+# ============================================================
+FROM ubuntu:20.04
+ENV DEBIAN_FRONTEND=noninteractive
+ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+ENV HADOOP_VERSION=3.3.6
+ENV HADOOP_HOME=/usr/local/hadoop
+ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+
+# 1. Packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openjdk-8-jdk \
+        openssh-server openssh-client \
+        wget curl netcat sudo vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. User hduser
+RUN groupadd hadoop \
+ && useradd -m -s /bin/bash -G hadoop,sudo hduser \
+ && echo "hduser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# 3. SSH keypair dùng chung (lab only – không dùng production)
+RUN mkdir -p /home/hduser/.ssh \
+ && ssh-keygen -t rsa -P "" -f /home/hduser/.ssh/id_rsa \
+ && cat /home/hduser/.ssh/id_rsa.pub >> /home/hduser/.ssh/authorized_keys \
+ && chmod 700 /home/hduser/.ssh \
+ && chmod 600 /home/hduser/.ssh/authorized_keys \
+ && chown -R hduser:hduser /home/hduser/.ssh
+
+# 4. SSH daemon config
+RUN mkdir -p /run/sshd \
+ && sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
+ && echo "StrictHostKeyChecking no"  >> /etc/ssh/ssh_config \
+ && echo "UserKnownHostsFile /dev/null" >> /etc/ssh/ssh_config
+
+# 5. Hadoop
+RUN wget -q https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz \
+        -O /tmp/hadoop.tar.gz \
+ && tar -xzf /tmp/hadoop.tar.gz -C /usr/local/ \
+ && mv /usr/local/hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
+ && rm /tmp/hadoop.tar.gz \
+ && chown -R hduser:hadoop ${HADOOP_HOME}
+
+# 6. Hadoop env vars trong hadoop-env.sh
+RUN echo "export JAVA_HOME=${JAVA_HOME}"                          >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export HDFS_NAMENODE_USER=hduser"                       >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export HDFS_DATANODE_USER=hduser"                       >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export HDFS_SECONDARYNAMENODE_USER=hduser"              >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export YARN_RESOURCEMANAGER_USER=hduser"                >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh \
+ && echo "export YARN_NODEMANAGER_USER=hduser"                    >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
+
+# 7. bashrc cho hduser
+RUN echo "export JAVA_HOME=${JAVA_HOME}"        >> /home/hduser/.bashrc \
+ && echo "export HADOOP_HOME=${HADOOP_HOME}"    >> /home/hduser/.bashrc \
+ && echo "export PATH=\$PATH:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin" >> /home/hduser/.bashrc

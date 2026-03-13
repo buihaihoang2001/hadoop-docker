@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <!-- Metastore JDBC (slide 23-25) -->
+  <property>
+    <n>javax.jdo.option.ConnectionURL</n>
+    <value>jdbc:mysql://mysql:3306/hivedb?createDatabaseIfNotExist=true&amp;useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=UTC</value>
+  </property>
+  <property>
+    <n>javax.jdo.option.ConnectionDriverName</n>
+    <value>com.mysql.cj.jdbc.Driver</value>
+  </property>
+  <property>
+    <n>javax.jdo.option.ConnectionUserName</n>
+    <value>hivedb_user</value>
+  </property>
+  <property>
+    <n>javax.jdo.option.ConnectionPassword</n>
+    <value>Hive@123</value>
+  </property>
+
+  <!-- Warehouse (slide 22) -->
+  <property>
+    <n>hive.metastore.warehouse.dir</n>
+    <value>/hive/warehouse</value>
+  </property>
+
+  <!-- HiveServer2 -->
+  <property>
+    <n>hive.server2.thrift.bind.host</n>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <n>hive.server2.thrift.port</n>
+    <value>10000</value>
+  </property>
+  <property>
+    <n>hive.server2.webui.host</n>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <n>hive.server2.webui.port</n>
+    <value>10002</value>
+  </property>
+
+  <!-- Tắt schema verification để tránh lỗi khi upgrade -->
+  <property>
+    <n>hive.metastore.schema.verification</n>
+    <value>false</value>
+  </property>
+</configuration>

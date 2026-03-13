@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+  <property>
+    <n>mapreduce.framework.name</n>
+    <value>yarn</value>
+  </property>
+  <property>
+    <n>mapreduce.map.memory.mb</n>
+    <value>512</value>
+  </property>
+  <property>
+    <n>mapreduce.reduce.memory.mb</n>
+    <value>512</value>
+  </property>
+  <property>
+    <n>mapreduce.jobhistory.address</n>
+    <value>master:10020</value>
+  </property>
+  <property>
+    <n>mapreduce.jobhistory.webapp.address</n>
+    <value>master:19888</value>
+  </property>
+  <property>
+    <n>yarn.app.mapreduce.am.env</n>
+    <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+  </property>
+  <property>
+    <n>mapreduce.map.env</n>
+    <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+  </property>
+  <property>
+    <n>mapreduce.reduce.env</n>
+    <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+  </property>
+</configuration>

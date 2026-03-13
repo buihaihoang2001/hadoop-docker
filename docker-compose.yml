@@ -1,0 +1,141 @@
+version: "3.8"
+
+# =============================================================================
+# Hadoop 3.3.6 + Hive 2.3.9 — Self-contained cluster
+# Build order: base → slave(x2) → master
+# Chạy: docker compose up -d --build
+# =============================================================================
+
+networks:
+  hadoop-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+volumes:
+  mysql-data:
+  namenode-data:
+  datanode1-data:
+  datanode2-data:
+
+services:
+
+  # ── bước 0: build base image trước ─────────────────────────────────────────
+  base-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    image: hadoop-base:3.3.6
+    command: echo "base image built"
+    networks:
+      - hadoop-net
+
+  # ── MySQL 8.0 — Hive Metastore ─────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    hostname: mysql
+    restart: unless-stopped
+    depends_on:
+      - base-builder
+    networks:
+      hadoop-net:
+        ipv4_address: 172.20.0.10
+    environment:
+      MYSQL_ROOT_PASSWORD: "admin@123"
+      MYSQL_DATABASE: hivedb
+      MYSQL_USER: hivedb_user
+      MYSQL_PASSWORD: "Hive@123"
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --bind-address=0.0.0.0
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init-mysql.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-padmin@123"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  # ── Slave 1 — DataNode + NodeManager ───────────────────────────────────────
+  slave1:
+    build:
+      context: .
+      dockerfile: Dockerfile.slave
+    image: hadoop-slave:3.3.6
+    container_name: slave1
+    hostname: slave1
+    restart: unless-stopped
+    depends_on:
+      - base-builder
+    networks:
+      hadoop-net:
+        ipv4_address: 172.20.0.21
+    extra_hosts:
+      - "master:172.20.0.20"
+      - "slave2:172.20.0.22"
+      - "mysql:172.20.0.10"
+    volumes:
+      - datanode1-data:/hadoop/dfs/data
+    ports:
+      - "9864:9864"   # DataNode Web UI
+
+  # ── Slave 2 — DataNode + NodeManager ───────────────────────────────────────
+  slave2:
+    build:
+      context: .
+      dockerfile: Dockerfile.slave
+    image: hadoop-slave:3.3.6
+    container_name: slave2
+    hostname: slave2
+    restart: unless-stopped
+    depends_on:
+      - base-builder
+    networks:
+      hadoop-net:
+        ipv4_address: 172.20.0.22
+    extra_hosts:
+      - "master:172.20.0.20"
+      - "slave1:172.20.0.21"
+      - "mysql:172.20.0.10"
+    volumes:
+      - datanode2-data:/hadoop/dfs/data
+    ports:
+      - "9865:9864"   # DataNode Web UI (host port khác tránh conflict)
+
+  # ── Master — NameNode + ResourceManager + HiveServer2 ──────────────────────
+  master:
+    build:
+      context: .
+      dockerfile: Dockerfile.master
+    image: hadoop-hive-master:3.3.6-2.3.9
+    container_name: master
+    hostname: master
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      slave1:
+        condition: service_started
+      slave2:
+        condition: service_started
+    networks:
+      hadoop-net:
+        ipv4_address: 172.20.0.20
+    extra_hosts:
+      - "slave1:172.20.0.21"
+      - "slave2:172.20.0.22"
+      - "mysql:172.20.0.10"
+    volumes:
+      - namenode-data:/hadoop/dfs/name
+    ports:
+      - "9870:9870"    # HDFS NameNode Web UI
+      - "8088:8088"    # YARN ResourceManager Web UI
+      - "10000:10000"  # HiveServer2 Thrift
+      - "10002:10002"  # HiveServer2 Web UI
+      - "19888:19888"  # MapReduce Job History
